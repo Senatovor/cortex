@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from backend.database.session import session_manager, DatabaseSessionManager
 from backend.config import config
 from backend.auth.router import auth_api_router
+from backend.rag_engine.vector_router import vector_router
 from backend.rag_engine.qdrant import VectorStoreManager, vector_manager
 
 
@@ -66,6 +67,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(auth_api_router)  # Установка роутера авторизации
+    app.include_router(vector_router)
 
     return app
 
