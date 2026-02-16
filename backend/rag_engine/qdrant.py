@@ -8,6 +8,27 @@ from backend.config import config
 
 
 class VectorStoreManager:
+    """
+    Менеджер для работы с векторными хранилищами Qdrant.
+
+    Управляет подключением к Qdrant, созданием эмбеддингов через Ollama
+    и инициализацией коллекций. Поддерживает работу с несколькими коллекциями
+    одновременно, кэшируя их в памяти.
+
+    Attributes:
+        embeddings (OllamaEmbeddings | None): Модель для создания эмбеддингов
+        qdr_client (QdrantClient | None): Клиент для подключения к Qdrant
+        vector_stores (dict[str, QdrantVectorStore]): Словарь инициализированных
+            векторных хранилищ, где ключ - имя коллекции
+
+    Args:
+        embeddings (OllamaEmbeddings | None, optional):
+            Готовая модель эмбеддингов. Если не указана, будет создана при init().
+            Defaults to None.
+        qdr_client (QdrantClient | None, optional):
+            Готовый клиент Qdrant. Если не указан, будет создан при init().
+            Defaults to None.
+    """
     def __init__(
             self,
             embeddings: OllamaEmbeddings | None = None,
@@ -18,6 +39,16 @@ class VectorStoreManager:
         self.vector_stores: dict[str, QdrantVectorStore] = {}
 
     async def init(self):
+        """
+        Асинхронная инициализация менеджера векторной БД.
+
+        Создает подключение к Ollama для эмбеддингов, инициализирует клиент Qdrant,
+        проверяет наличие и создает при необходимости все коллекции из конфигурации.
+
+        Raises:
+            RuntimeError: Если не удалось инициализировать менеджер.
+                          Возникает при любых ошибках подключения или создания коллекций.
+        """
         logger.info('Инициализация менеджера векторной БД...')
         try:
             logger.info('Создание embeddings...')
@@ -48,10 +79,23 @@ class VectorStoreManager:
             raise RuntimeError(f"Не удалось инициализировать менеджер векторной БД: {e}") from e
 
     async def close(self):
+        """Закрывает соединение с клиентом Qdrant."""
         if self.qdr_client:
             self.qdr_client.close()
 
     def get_vector_store(self, collection_name: str) -> QdrantVectorStore:
+        """
+        Возвращает векторное хранилище для указанной коллекции.
+
+        Args:
+            collection_name (str): Имя коллекции, для которой нужно получить хранилище.
+
+        Returns:
+            QdrantVectorStore: Инициализированное векторное хранилище для работы с коллекцией.
+
+        Raises:
+            KeyError: Если коллекция с указанным именем не была инициализирована.
+        """
         return self.vector_stores[collection_name]
 
 
