@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 from sqlalchemy.sql import text
 
 from backend.rag_engine.qdrant import VectorStoreManager
+
 import requests
 import json
 from loguru import logger
@@ -111,8 +112,6 @@ class ScriptVector:
                   f'Ответ: {{"users": {{"id": "Уникальный идентификатор пользователя", "email": "Email пользователя", "created_at": "Дата регистрации"}}, "orders": {{"id": "Уникальный идентификатор заказа", "user_id": "ID пользователя, создавшего заказ", "total": "Сумма заказа"}}}}\n\n'
                   f'Начинай генерацию ответа сразу с JSON:')
 
-        print(prompt)
-
         url = 'http://10.11.12.64:11434/api/generate'
         data = {
             "model": "qwen2.5:3b",
@@ -156,7 +155,6 @@ class ScriptVector:
                 logger.error("Не удалось получить описания полей")
                 return "Ошибка: не удалось получить описания полей"
             logger.info(collection_name)
-            logger.info(collection_name)
             vector_store = vector_manager.get_vector_store(collection_name)
             logger.info('векторная бд получена')
             if vector_store is None:
@@ -165,16 +163,12 @@ class ScriptVector:
 
             for key, value in response.items():
                 text = f'Название таблицы: {key} Значения и описания: {value}'
-                    # Запускаем синхронный add_texts в отдельном потоке
-                await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    lambda: vector_store.add_texts(
-                        texts=[text],
-                        metadatas=[{
-                            'table_name': key,
-                            'value': value
-                        }]
-                    )
+                await vector_store.aadd_texts(
+                    texts=[text],
+                    metadatas=[{
+                        'table_name': key,
+                        'value': value
+                    }]
                 )
         except Exception as e:
             logger.error(f"Ошибка: {e}")
