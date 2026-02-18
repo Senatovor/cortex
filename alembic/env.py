@@ -10,6 +10,7 @@ from alembic import context
 from backend.database.model import Base
 from backend.database.session import SQL_DATABASE_URL
 from backend.auth.models import User
+from backend.rag_engine.models import QdrantIds
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

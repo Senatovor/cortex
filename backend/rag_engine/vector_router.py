@@ -87,11 +87,17 @@ async def add_vdb(
     try:
         if flag:
             logger.info('Добавление векторного представления в бд')
-            await script.add_data_to_vdb(vector_database.vector_database, vector_manager, fields_description)
+            await script.add_data_to_vdb(
+                collection_name=vector_database.vector_database,
+                vector_manager=vector_manager,
+                fields_description=fields_description)
             return {'success': True, 'message': 'Представления загружены в бд'}
         else:
             logger.info('Добавление векторного представления в бд')
-            await script.add_data_to_vdb(vector_database.vector_database, vector_manager)
+            await script.add_data_to_vdb(
+                collection_name=vector_database.vector_database,
+                vector_manager=vector_manager,
+                fields_description=fields_description)
             return {'success': True, 'message': 'Представления загружены в бд'}
     except Exception as e:
         logger.error(f'Ошибка загрузки представлений {e}')
@@ -147,6 +153,9 @@ def get_point(
                 'table_name': formatted_point.table_name,
                 'value': formatted_point.value,
                 }
+        else:
+            logger.error(f'Точка {point_id} не найдена')
+            raise HTTPException(status_code=404, detail=f'Точка {point_id} не найдена')
     except Exception as e:
         logger.error(f'Ошибка получения точки {e}')
         raise HTTPException(status_code=404, detail=f'Ошибка получения точки {e}')

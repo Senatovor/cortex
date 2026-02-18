@@ -1,12 +1,18 @@
 import asyncio
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, AsyncSession
 from sqlalchemy.sql import text
+from sqlalchemy import select, insert
 
+from backend.database.session import session_manager
+from backend.rag_engine.models import QdrantIds
 from backend.rag_engine.qdrant import VectorStoreManager
+from backend.database.executer import sql_manager
 
 import requests
 import json
 from loguru import logger
+
+
 
 class ScriptVector:
     """
@@ -127,12 +133,15 @@ class ScriptVector:
         except Exception as e:
             logger.error(f'Ошибка запроса {e}')
 
-    async def add_data_to_vdb(self, collection_name: str, vector_manager: VectorStoreManager,
+    @session_manager.connection(commit=True)
+    async def add_data_to_vdb(self, db_session: AsyncSession, collection_name: str, vector_manager: VectorStoreManager,
                               fields_description: dict[str, dict] | None = None):
         """
         Генерирует описания для полей базы данных и сохраняет их в векторную БД.
 
         Args:
+            collection_name: Название коллекции
+            db_session: Сессия бд
             vector_database: Список названий векторных хранилищ
             vector_manager: Менеджер векторных хранилищ
             fields_description: Описания полей (если None, генерируются автоматически)
@@ -162,14 +171,29 @@ class ScriptVector:
 
 
             for key, value in response.items():
-                text = f'Название таблицы: {key} Значения и описания: {value}'
-                await vector_store.aadd_texts(
-                    texts=[text],
-                    metadatas=[{
-                        'table_name': key,
-                        'value': value
-                    }]
-                )
+                logger.info(key)
+                existing_field = await sql_manager(
+                    select(QdrantIds).where(
+                        QdrantIds.table_name == key
+                    )
+                ).scalar_one_or_none(db_session)
+                logger.info(existing_field)
+                if existing_field:
+                    logger.info(f'Таблица {key} уже в векторной бд')
+                else:
+                    text = f'Название таблицы: {key} Значения и описания: {value}'
+                    point = await vector_store.aadd_texts(
+                        texts=[text],
+                        metadatas=[{
+                            'table_name': key,
+                            'value': value
+                        }]
+                    )
+                    await sql_manager(
+                        insert(QdrantIds).values(
+                            {'ids': point[0], 'table_name': key}
+                        )
+                    ).execute(db_session)
         except Exception as e:
             logger.error(f"Ошибка: {e}")
             return f'Ошибка {e}'
