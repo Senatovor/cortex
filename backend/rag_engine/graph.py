@@ -1,31 +1,29 @@
 from langgraph.constants import START, END
 from langgraph.graph import StateGraph
+from langgraph.checkpoint.memory import InMemorySaver
 from loguru import logger
 import asyncio
 
-from backend.rag_engine.agent import checkpointer
 from backend.rag_engine.qdrant import vector_manager
 from backend.rag_engine.rag_scheme import AgentState
 from backend.rag_engine.nodes import (
-    classify_message_node,
-    answer_question_node,
-    analyze_sql_node,
-    route_after_classification,
+    sql_generate_node,
     user_input,
-    check_to_end
+    check_to_end,
+    analytics_data_summary_node,
+    classify_intent_node  # Новый узел
 )
 
 asyncio.run(vector_manager.init())
-
 
 # Создание графа
 graph = StateGraph(AgentState)
 
 # Добавление узлов
 graph.add_node('user_input', user_input)
-graph.add_node('classify_message', classify_message_node)
-graph.add_node('answer_question', answer_question_node)
-graph.add_node('analyze_sql', analyze_sql_node)
+graph.add_node('classify_intent', classify_intent_node)  # Новый узел классификации
+graph.add_node('analyze_sql', sql_generate_node)
+graph.add_node('analytics_data_summary', analytics_data_summary_node)
 
 # Определение связей
 graph.add_edge(START, "user_input")
@@ -33,29 +31,20 @@ graph.add_conditional_edges(
     "user_input",
     check_to_end,
     {
-        'continue': 'classify_message',
+        'continue': 'classify_intent',  # Теперь идем к классификации
         'end': END
     }
 )
-graph.add_conditional_edges(
-    "classify_message",
-    route_after_classification,
-    {
-        "analyze_sql": "analyze_sql",
-        "answer_question": "answer_question"
-    }
-)
-graph.add_edge('analyze_sql', END)
-graph.add_edge('answer_question', END)
+graph.add_edge('classify_intent', 'analyze_sql')
+graph.add_edge('analyze_sql', 'analytics_data_summary')
+graph.add_edge('analytics_data_summary', END)
 
 if __name__ == "__main__":
-    # Компиляция графа с чекпоинтером
-    app = graph.compile(checkpointer=checkpointer)
-
-    # Конфигурация сессии (thread_id хранит историю)
-    config = {"configurable": {"thread_id": "user_123_session_1"}}
+    app = graph.compile(checkpointer=InMemorySaver())
+    config = {"configurable": {"thread_id": "graph_session"}}
 
     print("🤖 Бот готов! (введите 'выход' для завершения)")
+    print("🎯 Теперь я понимаю, когда нужны только данные, а когда аналитика!")
 
     while True:
         try:
@@ -63,18 +52,20 @@ if __name__ == "__main__":
             if user_text.lower() in ["выход", "exit", "quit"]:
                 break
 
-            # ✅ Правильная структура ввода
             result = app.invoke(
                 {
                     "current_user_input": user_text,
                     "messages": [],
                     "message_type": "",
-                    "sql_query": ""
+                    "sql_query": "",
+                    "data_summary": [],
+                    "query_intent": None,
+                    "data_volume": None,
+                    "processed_data": None
                 },
                 config=config
             )
 
-            # Вывод ответа
             if result.get("messages"):
                 last_msg = result["messages"][-1]
                 print(f"🤖 ИИ: {last_msg.content}")
