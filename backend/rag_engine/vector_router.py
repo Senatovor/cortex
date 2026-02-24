@@ -25,7 +25,9 @@ def get_fields_description(
             status_code=400,
             detail="fields_description is required when flag is True"
         )
-    return fields_description if flag else None
+    return fields_description.fields_description if flag else None
+
+
 
 def get_vector_manager(request: Request) -> VectorStoreManager:
     '''
@@ -36,6 +38,32 @@ def get_vector_manager(request: Request) -> VectorStoreManager:
 async def get_db_manager(request: Request) -> DatabaseSessionManager:
     return request.app.state.db_manager
 
+
+@vector_router.get("/schema", summary='Получение схемы базы данных')
+async def get_db_schema(
+        db_manager: DatabaseSessionManager = Depends(get_db_manager)
+) -> dict:
+    """
+    Возвращает схему базы данных: список таблиц и их колонок.
+
+    Returns:
+        dict: Словарь, где ключ - имя таблицы, значение - список названий колонок
+
+    Example:
+        {
+            "users": ["id", "email", "created_at"],
+            "orders": ["id", "user_id", "total"]
+        }
+    """
+    logger.info('Запрос схемы базы данных')
+    try:
+        script = ScriptVector(db_session_manager=db_manager)
+        schema = await script.get_db_schema()
+        logger.info(f'Схема получена: {len(schema)} таблиц')
+        return schema
+    except Exception as e:
+        logger.error(f'Ошибка получения схемы БД: {e}')
+        raise HTTPException(status_code=500, detail=f'Ошибка получения схемы БД: {str(e)}')
 
 @vector_router.post("/", summary='Создание и добавление векторных представлений')
 async def add_vdb(

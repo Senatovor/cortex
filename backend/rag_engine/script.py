@@ -216,7 +216,6 @@ class ScriptVector:
             if vector_store is None:
                 logger.error(f"Векторное хранилище {collection_name} не найдено")
 
-            dont_add = ['alembic_version', 'qdrantidss'] #Таблицы, которые не нужно добавлять в векторную бд
 
             for key, value in response.items():
                 logger.info(key)
@@ -228,8 +227,6 @@ class ScriptVector:
                 logger.info(existing_field)
                 if existing_field:
                     logger.info(f'Таблица {key} уже в векторной бд')
-                elif key in dont_add:
-                    logger.info('Таблица в исключениях')
                 else:
                     text = f'Название таблицы: {key} Значения и описания: {value}'
                     point = await vector_store.aadd_texts(
