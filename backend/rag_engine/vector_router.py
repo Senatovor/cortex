@@ -39,6 +39,13 @@ async def get_db_manager(request: Request) -> DatabaseSessionManager:
     return request.app.state.db_manager
 
 
+@vector_router.get('/points', summary='Получение точек из всех коллекций')
+async def get_points(
+        vector_manager: VectorStoreManager = Depends(get_vector_manager),
+):
+    points = await ScriptVector.get_all_points(vector_manager=vector_manager)
+    return points
+
 @vector_router.get("/schema", summary='Получение схемы базы данных')
 async def get_db_schema(
         db_manager: DatabaseSessionManager = Depends(get_db_manager)
@@ -130,63 +137,6 @@ async def add_vdb(
     except Exception as e:
         logger.error(f'Ошибка загрузки представлений {e}')
         raise HTTPException(status_code=404, detail=f'Ошибка загрузки представлений {e}')
-
-@vector_router.get('/point/{collection_name}/{point_id}')
-def get_point(
-        point_id: uuid.UUID,
-        collection_name: str,
-        vector_manager: VectorStoreManager = Depends(get_vector_manager),
-) -> dict:
-    """
-    Получает точку (вектор) из указанной коллекции по её идентификатору.
-
-    Parameters
-    ----------
-    point_id : uuid.UUID
-        Уникальный идентификатор точки в векторной базе данных
-    collection_name : str
-        Название коллекции, в которой производится поиск точки
-    vector_manager : VectorStoreManager
-        Менеджер векторных хранилищ, предоставляющий доступ к Qdrant клиенту
-        (внедряется через зависимость)
-
-    Returns
-    -------
-    dict
-        Словарь с данными точки в формате:
-        - id: идентификатор точки
-        - table_name: название таблицы
-        - value: значение/содержимое точки
-        В случае отсутствия точки возвращает словарь с ключом 'error' и сообщением об ошибке
-
-    Notes
-    -----
-    Функция выполняет прямой запрос к Qdrant клиенту для получения точки,
-    затем форматирует результат с помощью PointResponseSchema.
-    """
-    try:
-        logger.info('Получение Qdrant клиента')
-        qdr_client = vector_manager.qdr_client
-        logger.info(f'Получение точки {point_id}')
-        point = qdr_client.retrieve(
-            collection_name=collection_name,
-            ids=[point_id],
-            with_payload=True,
-        )
-        if point:
-            formatted_point = PointResponseSchema.format_point(point[0])
-
-            return {
-                'id': formatted_point.id,
-                'table_name': formatted_point.table_name,
-                'value': formatted_point.value,
-                }
-        else:
-            logger.error(f'Точка {point_id} не найдена')
-            raise HTTPException(status_code=404, detail=f'Точка {point_id} не найдена')
-    except Exception as e:
-        logger.error(f'Ошибка получения точки {e}')
-        raise HTTPException(status_code=404, detail=f'Ошибка получения точки {e}')
 
 @vector_router.put('/update_point', summary='Обновление точки')
 async def update_vdb(
