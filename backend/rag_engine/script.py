@@ -6,6 +6,7 @@ from sqlalchemy import select, insert
 from backend.database.session import session_manager
 from backend.rag_engine.models import QdrantIds
 from backend.rag_engine.qdrant import VectorStoreManager
+from backend.rag_engine.config import RagConfig
 from backend.database.executer import sql_manager
 
 import requests
@@ -216,7 +217,6 @@ class ScriptVector:
             if vector_store is None:
                 logger.error(f"Векторное хранилище {collection_name} не найдено")
 
-            dont_add = ['alembic_version', 'qdrantidss'] #Таблицы, которые не нужно добавлять в векторную бд
 
             for key, value in response.items():
                 logger.info(key)
@@ -228,8 +228,6 @@ class ScriptVector:
                 logger.info(existing_field)
                 if existing_field:
                     logger.info(f'Таблица {key} уже в векторной бд')
-                elif key in dont_add:
-                    logger.info('Таблица в исключениях')
                 else:
                     text = f'Название таблицы: {key} Значения и описания: {value}'
                     point = await vector_store.aadd_texts(
@@ -247,3 +245,65 @@ class ScriptVector:
         except Exception as e:
             logger.error(f"Ошибка: {e}")
             return f'Ошибка {e}'
+
+    @staticmethod
+    async def get_all_points(vector_manager: VectorStoreManager):
+        try:
+            qdr_client = vector_manager.qdr_client
+            rag_config = RagConfig()
+            all_points = []  # список для всех точек
+            logger.info(rag_config.LIST_COLLECTION)
+
+            for name in rag_config.LIST_COLLECTION:
+                logger.info(f"Получение точек из коллекции: {name}")
+
+                # scroll возвращает кортеж (points, next_offset)
+                result = qdr_client.scroll(
+                    collection_name=name,
+                    with_payload=True,
+                )
+
+                # Распаковываем кортеж
+                points, next_offset = result
+
+                # Обрабатываем полученные точки
+                for point in points:
+                    point_data = {
+                        'id': point.id,
+                        'collection': name,
+                        'matadata': point.payload['metadata']
+                    }
+
+                    all_points.append(point_data)
+
+                logger.info(f"Получено {len(points)} точек из {name}")
+
+                while next_offset is not None:
+                    result = qdr_client.scroll(
+                        collection_name=name,
+                        with_payload=True,
+                        offset=next_offset
+                    )
+                    points, next_offset = result
+
+                    for point in points:
+                        point_data = {
+                            'id': point.id,
+                            'collection': name,
+                            'payload': point.payload
+                        }
+                        if point.payload and 'metadata' in point.payload:
+                            point_data['table_info'] = point.payload['metadata']
+
+                        all_points.append(point_data)
+
+                    logger.info(f"Получено еще {len(points)} точек из {name}")
+
+            logger.success(f"Всего получено точек: {len(all_points)}")
+            return all_points
+
+        except Exception as e:
+            logger.error(f'Ошибка получения точек: {e}')
+            logger.exception("Детали ошибки:")
+            return []
+
