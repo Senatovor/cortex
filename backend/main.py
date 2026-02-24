@@ -67,7 +67,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(auth_api_router)  # Установка роутера авторизации
-    app.include_router(vector_router)
+    app.include_router(vector_router) # Установка роутера векторной бд
 
     return app
 

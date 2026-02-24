@@ -1,11 +1,18 @@
 import asyncio
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, AsyncSession
 from sqlalchemy.sql import text
+from sqlalchemy import select, insert
 
+from backend.database.session import session_manager
+from backend.rag_engine.models import QdrantIds
 from backend.rag_engine.qdrant import VectorStoreManager
+from backend.database.executer import sql_manager
+
 import requests
 import json
 from loguru import logger
+
+
 
 class ScriptVector:
     """
@@ -84,7 +91,7 @@ class ScriptVector:
         schema_info = await self.get_db_schema()
         logger.info(schema_info)
         logger.info('Получаю описания')
-        prompt = (f'Твоя задача — сгенерировать описания для полей базы данных.\n'
+        prompt = (f'Твоя задача — сгенерировать описания и степень конфиденциальности для полей базы данных.\n'
                   f'Входные данные (схема БД): {schema_info}\n\n'
                   f'Требования к ответу:\n'
                   f'1. Ответ должен быть ТОЛЬКО валидным JSON-объектом\n'
@@ -92,11 +99,20 @@ class ScriptVector:
                   f'3. Структура JSON:\n'
                   f'{{\n'
                   f'  "имя_таблицы_1": {{\n'
-                  f'    "имя_поля_1": "понятное описание на русском языке",\n'
-                  f'    "имя_поля_2": "понятное описание на русском языке"\n'
+                  f'    "имя_поля_1": {{\n'
+                  f'      "description": "понятное описание на русском языке",\n'
+                  f'      "confidenciality": число_от_1_до_10\n'
+                  f'    }},\n'
+                  f'    "имя_поля_2": {{\n'
+                  f'      "description": "понятное описание на русском языке",\n'
+                  f'      "confidenciality": число_от_1_до_10\n'
+                  f'    }}\n'
                   f'  }},\n'
                   f'  "имя_таблицы_2": {{\n'
-                  f'    "имя_поля_1": "понятное описание на русском языке"\n'
+                  f'    "имя_поля_1": {{\n'
+                  f'      "description": "понятное описание на русском языке",\n'
+                  f'      "confidenciality": число_от_1_до_10\n'
+                  f'    }}\n'
                   f'  }}\n'
                   f'}}\n\n'
                   f'Правила генерации описаний:\n'
@@ -106,12 +122,48 @@ class ScriptVector:
                   f'- Для id полей пиши "Уникальный идентификатор записи"\n'
                   f'- Для полей с датами пиши "Дата и время создания/изменения/события"\n'
                   f'- Для внешних ключей указывай, на какую таблицу ссылаются\n\n'
+                  f'Правила определения степени конфиденциальности (confidenciality от 1 до 10):\n'
+                  f'- 1-2: Публичная информация (можно публиковать открыто)\n'
+                  f'  * Примеры: id, даты создания, статусы, справочные значения\n'
+                  f'- 3-4: Внутренняя информация (можно показывать внутри компании)\n'
+                  f'  * Примеры: названия, описания, категории, технические поля\n'
+                  f'- 5-6: Ограниченного доступа (только для авторизованных пользователей)\n'
+                  f'  * Примеры: email, username, обезличенная статистика\n'
+                  f'- 7-8: Конфиденциальная информация (ограниченный круг сотрудников)\n'
+                  f'  * Примеры: персональные данные, финансовые показатели, оценки\n'
+                  f'- 9-10: Особо конфиденциальная (только владелец и администраторы)\n'
+                  f'  * Примеры: пароли, токены, ключи доступа, медицинские данные\n\n'
                   f'Пример:\n'
-                  f'Вход: {{"users": ["id", "email", "created_at"], "orders": ["id", "user_id", "total"]}}\n'
-                  f'Ответ: {{"users": {{"id": "Уникальный идентификатор пользователя", "email": "Email пользователя", "created_at": "Дата регистрации"}}, "orders": {{"id": "Уникальный идентификатор заказа", "user_id": "ID пользователя, создавшего заказ", "total": "Сумма заказа"}}}}\n\n'
+                  f'Вход: {{"users": ["id", "username", "email", "password", "created_at", "scopes"]}}\n'
+                  f'Ответ: {{\n'
+                  f'  "users": {{\n'
+                  f'    "id": {{\n'
+                  f'      "description": "Уникальный идентификатор пользователя",\n'
+                  f'      "confidenciality": 1\n'
+                  f'    }},\n'
+                  f'    "username": {{\n'
+                  f'      "description": "Имя пользователя для входа",\n'
+                  f'      "confidenciality": 5\n'
+                  f'    }},\n'
+                  f'    "email": {{\n'
+                  f'      "description": "Электронная почта пользователя",\n'
+                  f'      "confidenciality": 6\n'
+                  f'    }},\n'
+                  f'    "password": {{\n'
+                  f'      "description": "Хэш пароля",\n'
+                  f'      "confidenciality": 10\n'
+                  f'    }},\n'
+                  f'    "created_at": {{\n'
+                  f'      "description": "Дата регистрации пользователя",\n'
+                  f'      "confidenciality": 2\n'
+                  f'    }},\n'
+                  f'    "scopes": {{\n'
+                  f'      "description": "Разрешения и роли пользователя",\n'
+                  f'      "confidenciality": 8\n'
+                  f'    }}\n'
+                  f'  }}\n'
+                  f'}}\n\n'
                   f'Начинай генерацию ответа сразу с JSON:')
-
-        print(prompt)
 
         url = 'http://10.11.12.64:11434/api/generate'
         data = {
@@ -128,12 +180,15 @@ class ScriptVector:
         except Exception as e:
             logger.error(f'Ошибка запроса {e}')
 
-    async def add_data_to_vdb(self, collection_name: str, vector_manager: VectorStoreManager,
+    @session_manager.connection(commit=True)
+    async def add_data_to_vdb(self, db_session: AsyncSession, collection_name: str, vector_manager: VectorStoreManager,
                               fields_description: dict[str, dict] | None = None):
         """
         Генерирует описания для полей базы данных и сохраняет их в векторную БД.
 
         Args:
+            collection_name: Название коллекции
+            db_session: Сессия бд
             vector_database: Список названий векторных хранилищ
             vector_manager: Менеджер векторных хранилищ
             fields_description: Описания полей (если None, генерируются автоматически)
@@ -156,26 +211,39 @@ class ScriptVector:
                 logger.error("Не удалось получить описания полей")
                 return "Ошибка: не удалось получить описания полей"
             logger.info(collection_name)
-            logger.info(collection_name)
             vector_store = vector_manager.get_vector_store(collection_name)
             logger.info('векторная бд получена')
             if vector_store is None:
                 logger.error(f"Векторное хранилище {collection_name} не найдено")
 
+            dont_add = ['alembic_version', 'qdrantidss'] #Таблицы, которые не нужно добавлять в векторную бд
 
             for key, value in response.items():
-                text = f'Название таблицы: {key} Значения и описания: {value}'
-                    # Запускаем синхронный add_texts в отдельном потоке
-                await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    lambda: vector_store.add_texts(
+                logger.info(key)
+                existing_field = await sql_manager(
+                    select(QdrantIds).where(
+                        QdrantIds.table_name == key
+                    )
+                ).scalar_one_or_none(db_session)
+                logger.info(existing_field)
+                if existing_field:
+                    logger.info(f'Таблица {key} уже в векторной бд')
+                elif key in dont_add:
+                    logger.info('Таблица в исключениях')
+                else:
+                    text = f'Название таблицы: {key} Значения и описания: {value}'
+                    point = await vector_store.aadd_texts(
                         texts=[text],
                         metadatas=[{
                             'table_name': key,
                             'value': value
                         }]
                     )
-                )
+                    await sql_manager(
+                        insert(QdrantIds).values(
+                            {'ids': point[0], 'table_name': key}
+                        )
+                    ).execute(db_session)
         except Exception as e:
             logger.error(f"Ошибка: {e}")
             return f'Ошибка {e}'
