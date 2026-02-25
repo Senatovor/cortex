@@ -251,7 +251,7 @@ class ScriptVector:
         try:
             qdr_client = vector_manager.qdr_client
             rag_config = RagConfig()
-            all_points = []  # список для всех точек
+            all_points = []
             logger.info(rag_config.LIST_COLLECTION)
 
             for name in rag_config.LIST_COLLECTION:
