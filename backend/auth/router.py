@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Security
+from fastapi import APIRouter, Depends
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import JSONResponse
 from typing import Annotated
@@ -58,8 +58,6 @@ async def register(
 
 
 @auth_api_router.get('/info', name='users-info', response_model=SystemUserScheme)
-async def user_info(
-        user: Annotated[SystemUserScheme, Security(get_current_user, scopes=['user:all'])]
-):
+async def user_info(user: Annotated[SystemUserScheme, Depends(get_current_user)]):
     """Получить основную информацию об авторизированном юзере"""
     return user

@@ -16,8 +16,6 @@ def create_intent_classifier_agent():
     )
     agent_intent_classifier = create_agent(
         model=model,
-        tools=[],
-        checkpointer=InMemorySaver(),
         system_prompt=intent_classifier_prompt,
         response_format=ToolStrategy(QueryIntentScheme)
     )
@@ -32,8 +30,6 @@ def create_sql_generate_agent():
     )
     agent_sql = create_agent(
         model=model,
-        tools=[],
-        checkpointer=InMemorySaver(),
         system_prompt=sql_generate_prompt,
         response_format=ToolStrategy(SQLScheme)
     )
@@ -48,8 +44,6 @@ def create_analytic_agent():
     )
     analytic_agent = create_agent(
         model=model,
-        tools=[],
-        checkpointer=InMemorySaver(),
         system_prompt=analytic_prompt,
         response_format=ToolStrategy(AnalyticScheme)
     )

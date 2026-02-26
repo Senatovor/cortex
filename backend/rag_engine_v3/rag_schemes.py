@@ -5,19 +5,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from pandas import DataFrame
 
 
-class AgentState(BaseModel):
-    messages: Annotated[list[BaseMessage], add_messages]
-    message_type: str
-    messages_length: int = 0
-    current_user_input: str
-    sql_query: Optional[str] = None
-    error_str: Optional[str] = None
-    error_attempt: int = 0
-    df_len: int = 0
-    need_to_optimize: bool = False
-    df: Optional[str] = None
-
-
 class QueryIntentScheme(BaseModel):
     """Определяет намерение пользователя в запросе"""
     intent_type: Literal["data", "statistics", "analytics", "other"] = Field(
