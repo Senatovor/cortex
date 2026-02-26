@@ -2,6 +2,7 @@ from typing import Annotated, Literal, Optional, Any
 from langchain_core.messages import BaseMessage
 from langgraph.graph import add_messages
 from pydantic import BaseModel, Field
+from .qdrant import VectorStoreManager
 
 
 class AgentState(BaseModel):
@@ -28,20 +29,24 @@ class MessageClassificationScheme(BaseModel):
 class QueryIntentScheme(BaseModel):
     """Определяет намерение пользователя в запросе"""
     intent_type: Literal["data_only", "analytics", "unknown"] = Field(
-        description="Тип намерения: только данные, аналитика или неизвестно"
+        description="Тип намерения: только данные, аналитика или неизвестно",
+        default="unknown"
     )
     requires_analytics: bool = Field(
-        description="Требуется ли аналитическая обработка данных"
+        description="Требуется ли аналитическая обработка данных",
+        default=False
     )
     data_volume_estimate: Literal["small", "medium", "large", "unknown"] = Field(
-        description="Предполагаемый объем данных"
+        description="Предполагаемый объем данных",
+        default="unknown"
     )
     key_metrics: list[str] = Field(
         default_factory=list,
-        description="Ключевые метрики для анализа (если нужны)"
+        description="Ключевые метрики для анализа (если нужны)",
     )
     aggregation_needed: bool = Field(
-        description="Нужна ли агрегация данных"
+        description="Нужна ли агрегация данных",
+        default=False
     )
 
 

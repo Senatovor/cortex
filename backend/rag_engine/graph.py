@@ -21,7 +21,7 @@ graph = StateGraph(AgentState)
 
 # Добавление узлов
 graph.add_node('user_input', user_input)
-graph.add_node('classify_intent', classify_intent_node)  # Новый узел классификации
+graph.add_node('classify_intent', classify_intent_node)
 graph.add_node('analyze_sql', sql_generate_node)
 graph.add_node('analytics_data_summary', analytics_data_summary_node)
 
@@ -31,7 +31,7 @@ graph.add_conditional_edges(
     "user_input",
     check_to_end,
     {
-        'continue': 'classify_intent',  # Теперь идем к классификации
+        'continue': 'classify_intent',
         'end': END
     }
 )
@@ -61,9 +61,14 @@ if __name__ == "__main__":
                     "data_summary": [],
                     "query_intent": None,
                     "data_volume": None,
-                    "processed_data": None
+                    "processed_data": None,
                 },
-                config=config
+                config={
+                    "configurable": {
+                        "manager": vector_manager,
+                        "thread_id": "some_thread_id"
+                    }
+                }
             )
 
             if result.get("messages"):

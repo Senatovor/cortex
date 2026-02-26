@@ -9,7 +9,7 @@ from backend.rag_engine.prompts import (
     deep_talking_agent_prompt, analytic_prompt,
     optimized_sql_prompt  # Новый промпт
 )
-from backend.rag_engine.rag_scheme import SQLScheme, AnalyticsScheme, OptimizedSQLScheme
+from backend.rag_engine.rag_scheme import SQLScheme, AnalyticsScheme, OptimizedSQLScheme, QueryIntentScheme
 
 
 def create_generate_sql_agent():
@@ -74,6 +74,37 @@ def create_deep_talking_agent():
     return agent_deep_talking
 
 
+def create_intent_classifier_agent():
+    model = ChatOllama(
+        model=config.rag_config.MODEL_NAME,
+        base_url=config.rag_config.MODEL_HOST,
+        temperature=0.1,
+    )
+    agent_intent_classifier = create_agent(
+        model=model,
+        tools=[],
+        checkpointer=InMemorySaver(),
+        system_prompt="""
+        Ты - классификатор намерений для системы работы с базой данных.
+        Определи, что хочет пользователь: просто получить данные или провести анализ.
+
+        Правила классификации:
+        - DATA_ONLY: пользователь просит "дай данные", "покажи", "выведи", "список", "таблицу", "поля"
+        - ANALYTICS: пользователь просит "проанализируй", "сравни", "тенденция", "динамика", "статистика", "среднее", "максимум", "минимум", "итоги"
+
+        Также оцени объем данных:
+        - SMALL: запросы по конкретному ученику, классу, школе (до 100 строк)
+        - MEDIUM: запросы по району, нескольким школам (100-1000 строк)
+        - LARGE: запросы по всему региону, всем школам (более 1000 строк)
+
+        Верни ответ в формате JSON.
+        """,
+        response_format=ToolStrategy(QueryIntentScheme)
+    )
+    return agent_intent_classifier
+
+
 agent_generate_sql = create_generate_sql_agent()
 agent_optimized_sql = create_optimized_sql_agent()
 agent_deep_talking = create_deep_talking_agent()
+agent_intent_classifier = create_intent_classifier_agent()

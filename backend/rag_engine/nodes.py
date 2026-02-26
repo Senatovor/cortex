@@ -6,10 +6,9 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from ..config import config
-from .agents import agent_generate_sql, agent_deep_talking, agent_optimized_sql
+from .agents import agent_generate_sql, agent_deep_talking, agent_optimized_sql, agent_intent_classifier
 from .qdrant import vector_manager
 from .rag_scheme import AgentState
-from .intent_classifier import intent_classifier
 
 
 def user_input(state: AgentState):
@@ -36,8 +35,11 @@ def classify_intent_node(state: AgentState):
 
     try:
         # Асинхронно классифицируем намерение
-        import asyncio
-        intent = asyncio.run(intent_classifier.classify(user_input))
+        result = agent_intent_classifier.invoke(
+            input={"messages": [HumanMessage(content=user_input)]},
+            config={"configurable": {"thread_id": 'intent_session'}},
+        )
+        intent = result['structured_response']
 
         print(f"🔍 Определено намерение: {intent.intent_type}")
         print(f"📊 Требуется аналитика: {intent.requires_analytics}")
@@ -125,6 +127,7 @@ def sql_generate_node(state: AgentState):
 
         # Выполняем SQL запрос
         execution_result = execute_sql_query(sql_query)
+        print(execution_result)
 
         if not execution_result["success"]:
             error_msg = f"Ошибка выполнения SQL: {execution_result['error']}"
@@ -216,17 +219,14 @@ def analytics_data_summary_node(state: AgentState):
             # Для малых/средних объемов используем все данные
             analytics_data = str(data_summary)
 
+        print(analytics_data)
         # Отправляем в аналитический агент
         result = agent_deep_talking.invoke(
             input={"messages": [
                 SystemMessage(content=f"""
-                Проведи анализ данных по запросу пользователя.
+                Проведи анализ данных по запросу пользователя. ЭТО РЕАЛЬНЫЕ ДАННЫЕ
 
                 Данные: {analytics_data}
-
-                Запрос: {user_input}
-
-                Требуется: {intent.get('key_metrics', ['общий анализ'])}
                 """)
             ]},
             config={"configurable": {"thread_id": 'analytic_session'}},
