@@ -1,5 +1,4 @@
 import uuid
-
 from sqlalchemy.orm import Mapped
 
 from ..database.model import Base

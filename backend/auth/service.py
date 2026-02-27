@@ -39,19 +39,8 @@ class AuthService:
             if not await AuthHandler.verify_password(form_data.password, user.password):
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Неверный пароль')
 
-            requested_scopes = form_data.scopes
-            for requested_scope in requested_scopes:
-                if not requested_scope in user.scopes:
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail='Вы не можете запросить прав, которых у вас нету'
-                    )
-
             access_token = await AuthHandler.create_token(
-                data={
-                    "sub": user.email,
-                    "scope": " ".join(form_data.scopes)
-                },
+                data={"sub": user.email},
                 timedelta_minutes=config.auth_config.ACCESS_TOKEN_EXPIRE
             )
 
@@ -61,8 +50,7 @@ class AuthService:
             )
         except HTTPException:
             raise
-        except Exception as e:
-            logger.error(f'Во время выдачи токена произошла ошибка: {e}')
+        except Exception:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail='Ошибка сервера')
 
     @staticmethod
@@ -98,6 +86,5 @@ class AuthService:
                 logger.error('Такой пользователь уже есть')
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Конфликт: данные уже существуют")
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Ошибка сервера")
-        except Exception as e:
-            logger.error(f'Во время регистрации случилась ошибка: {e}')
+        except Exception:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail='Ошибка сервера')

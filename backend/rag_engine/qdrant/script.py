@@ -1,18 +1,15 @@
-import asyncio
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import text
 from sqlalchemy import select, insert
-
-from backend.database.session import session_manager
-from backend.rag_engine.models import QdrantIds
-from backend.rag_engine.qdrant import VectorStoreManager
-from backend.rag_engine.config import RagConfig
-from backend.database.executer import sql_manager
-
 import requests
 import json
 from loguru import logger
 
+from ...database.session import session_manager
+from ...database.executer import sql_manager
+from ..models import QdrantIds
+from .manager import VectorStoreManager
+from ...config import config
 
 
 class ScriptVector:
@@ -166,9 +163,9 @@ class ScriptVector:
                   f'}}\n\n'
                   f'Начинай генерацию ответа сразу с JSON:')
 
-        url = 'http://10.11.12.64:11434/api/generate'
+        url = f'{config.rag_config.MODEL_HOST}/api/generate'
         data = {
-            "model": "qwen2.5:3b",
+            "model": config.rag_config.MODEL_NAME,
             "stream": False,
             "prompt": prompt
         }
@@ -250,11 +247,10 @@ class ScriptVector:
     async def get_all_points(vector_manager: VectorStoreManager):
         try:
             qdr_client = vector_manager.qdr_client
-            rag_config = RagConfig()
-            all_points = []
-            logger.info(rag_config.LIST_COLLECTION)
+            all_points = []  # список для всех точек
+            logger.info(config.rag_config.LIST_COLLECTION)
 
-            for name in rag_config.LIST_COLLECTION:
+            for name in config.rag_config.LIST_COLLECTION:
                 logger.info(f"Получение точек из коллекции: {name}")
 
                 # scroll возвращает кортеж (points, next_offset)
@@ -306,4 +302,3 @@ class ScriptVector:
             logger.error(f'Ошибка получения точек: {e}')
             logger.exception("Детали ошибки:")
             return []
-
