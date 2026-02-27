@@ -1,6 +1,12 @@
+// edit/page.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
+import {
+  Save, X, ChevronDown, ChevronRight,
+  Edit, Loader, Database, FileText, Layers
+} from 'lucide-react'
+import Toast from '../components/Toast'
 
 interface PointMetadata {
   table_name: string
@@ -30,20 +36,21 @@ interface EditingPoint {
 }
 
 export default function EditPage() {
-  const [backendUrl, setBackendUrl] = useState('http://localhost:5001')
   const [points, setPoints] = useState<Point[]>([])
   const [loading, setLoading] = useState(false)
   const [expandedCollections, setExpandedCollections] = useState<Set<string>>(new Set())
   const [expandedPoints, setExpandedPoints] = useState<Set<string>>(new Set())
   const [editingPoints, setEditingPoints] = useState<Record<string, EditingPoint>>({})
   const [savingPoint, setSavingPoint] = useState<string | null>(null)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
+  const [backendUrl] = useState('http://localhost:5001')
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
 
-  // Загрузка точек
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type })
+  }
+
   const loadPoints = async () => {
     setLoading(true)
-    setError('')
 
     try {
       const response = await fetch(`${backendUrl}/vector/points`, {
@@ -60,7 +67,6 @@ export default function EditPage() {
       const data = await response.json()
       setPoints(data)
 
-      // Инициализируем редактируемые точки
       const initialEditing: Record<string, EditingPoint> = {}
       data.forEach((point: Point) => {
         initialEditing[point.id] = {
@@ -74,7 +80,7 @@ export default function EditPage() {
       setEditingPoints(initialEditing)
 
     } catch (err: any) {
-      setError(err.message)
+      showToast(err.message, 'error')
       console.error('Ошибка загрузки точек:', err)
     } finally {
       setLoading(false)
@@ -132,8 +138,6 @@ export default function EditPage() {
     if (!point) return
 
     setSavingPoint(pointId)
-    setError('')
-    setSuccess('')
 
     try {
       const requestBody = {
@@ -147,8 +151,6 @@ export default function EditPage() {
         }
       }
 
-      console.log('Saving point:', requestBody)
-
       const response = await fetch(`${backendUrl}/vector/update_point`, {
         method: 'PUT',
         headers: {
@@ -160,8 +162,7 @@ export default function EditPage() {
       const data = await response.json()
 
       if (response.ok) {
-        setSuccess(`Точка ${point.table_name} успешно обновлена`)
-        // Сбрасываем флаг изменений
+        showToast(`Точка ${point.table_name} успешно обновлена`, 'success')
         setEditingPoints(prev => ({
           ...prev,
           [pointId]: {
@@ -169,13 +170,12 @@ export default function EditPage() {
             hasChanges: false
           }
         }))
-        // Перезагружаем точки
         loadPoints()
       } else {
-        setError(JSON.stringify(data, null, 2))
+        showToast(JSON.stringify(data), 'error')
       }
     } catch (err: any) {
-      setError(`Ошибка сохранения: ${err.message}`)
+      showToast(`Ошибка сохранения: ${err.message}`, 'error')
     } finally {
       setSavingPoint(null)
     }
@@ -197,7 +197,6 @@ export default function EditPage() {
     }
   }
 
-  // Группируем точки по коллекциям
   const pointsByCollection = points.reduce((acc, point) => {
     if (!acc[point.collection]) {
       acc[point.collection] = []
@@ -207,193 +206,174 @@ export default function EditPage() {
   }, {} as Record<string, Point[]>)
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900">Редактирование точек</h1>
-        <button
-          onClick={loadPoints}
-          disabled={loading}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-        >
-          {loading ? 'Загрузка...' : '🔄 Обновить'}
-        </button>
-      </div>
-
-      {/* Настройки подключения */}
-      <div className="bg-white rounded shadow p-4">
-        <div className="flex gap-2 items-center">
-          <input
-            type="text"
-            value={backendUrl}
-            onChange={(e) => setBackendUrl(e.target.value)}
-            className="flex-1 px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
-            placeholder="URL бэкенда"
-          />
-          <button
-            onClick={() => loadPoints()}
-            className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
-          >
-            Подключиться
-          </button>
-        </div>
-      </div>
-
-      {/* Ошибка */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded p-4">
-          <p className="text-red-700 font-medium mb-1">Ошибка:</p>
-          <pre className="text-red-600 text-sm whitespace-pre-wrap">{error}</pre>
-        </div>
+    <>
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
       )}
 
-      {/* Успех */}
-      {success && (
-        <div className="bg-green-50 border border-green-200 rounded p-4">
-          <p className="text-green-700">{success}</p>
+      <div className="space-y-6">
+        {/* Заголовок страницы */}
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">
+            Редактирование точек
+          </h1>
+          <p className="text-sm text-gray-600 mt-1">
+            Управление метаданными векторных точек
+          </p>
         </div>
-      )}
 
-      {/* Загрузка */}
-      {loading && !points.length && (
-        <div className="text-center py-8">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-3 border-gray-300 border-t-blue-600"></div>
-          <p className="text-gray-500 mt-2">Загрузка точек...</p>
-        </div>
-      )}
-
-      {/* Список точек по коллекциям */}
-      {Object.entries(pointsByCollection).map(([collection, collectionPoints]) => (
-        <div key={collection} className="bg-white rounded shadow overflow-hidden">
-          {/* Заголовок коллекции */}
-          <div
-            onClick={() => toggleCollection(collection)}
-            className="bg-gray-50 px-6 py-3 flex items-center justify-between cursor-pointer hover:bg-gray-100"
-          >
-            <div className="flex items-center space-x-3">
-              <span className="font-semibold text-gray-800">{collection}</span>
-              <span className="text-sm text-gray-500">({collectionPoints.length} точек)</span>
-            </div>
-            <span className="text-gray-500">
-              {expandedCollections.has(collection) ? '▼' : '▶'}
-            </span>
+        {/* Загрузка */}
+        {loading && !points.length && (
+          <div className="text-center py-12">
+            <Loader className="w-8 h-8 text-blue-500 animate-spin mx-auto mb-3" />
+            <p className="text-sm text-gray-600">Загрузка точек...</p>
           </div>
+        )}
 
-          {/* Точки коллекции */}
-          {expandedCollections.has(collection) && (
-            <div className="p-4 space-y-3">
-              {collectionPoints.map((point) => {
-                const editingPoint = editingPoints[point.id]
-                if (!editingPoint) return null
+        {/* Список точек */}
+        {Object.entries(pointsByCollection).map(([collection, collectionPoints]) => (
+          <div key={collection} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            {/* Заголовок коллекции */}
+            <div
+              onClick={() => toggleCollection(collection)}
+              className="px-6 py-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
+            >
+              <div className="flex items-center space-x-3">
+                <Layers className="w-5 h-5 text-gray-400" />
+                <span className="font-medium text-gray-900">{collection}</span>
+                <span className="text-xs text-gray-500">
+                  {collectionPoints.length} {collectionPoints.length === 1 ? 'точка' : 'точек'}
+                </span>
+              </div>
+              {expandedCollections.has(collection) ? (
+                <ChevronDown className="w-5 h-5 text-gray-400" />
+              ) : (
+                <ChevronRight className="w-5 h-5 text-gray-400" />
+              )}
+            </div>
 
-                return (
-                  <div key={point.id} className="border rounded overflow-hidden">
-                    {/* Заголовок точки */}
-                    <div
-                      onClick={() => togglePoint(point.id)}
-                      className="bg-white px-4 py-2 flex items-center justify-between cursor-pointer hover:bg-gray-50 border-b"
-                    >
-                      <div className="flex items-center space-x-3">
-                        <span className="font-medium text-gray-700">{point.matadata.table_name}</span>
-                        <span className="text-xs text-gray-500">ID: {point.id.slice(0, 8)}...</span>
-                        {editingPoint.hasChanges && (
-                          <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
-                            ✏️ Есть изменения
+            {/* Точки коллекции */}
+            {expandedCollections.has(collection) && (
+              <div className="px-4 pb-4 space-y-3">
+                {collectionPoints.map((point) => {
+                  const editingPoint = editingPoints[point.id]
+                  if (!editingPoint) return null
+
+                  return (
+                    <div key={point.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                      {/* Заголовок точки */}
+                      <div
+                        onClick={() => togglePoint(point.id)}
+                        className="bg-gray-50 px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-gray-100 transition-colors"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <FileText className="w-4 h-4 text-gray-400" />
+                          <span className="font-medium text-gray-900">{point.matadata.table_name}</span>
+                          <span className="text-xs text-gray-500">
+                            ID: {point.id.slice(0, 8)}...
                           </span>
+                          {editingPoint.hasChanges && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                              <Edit className="w-3 h-3 mr-1" />
+                              изменения
+                            </span>
+                          )}
+                        </div>
+                        {expandedPoints.has(point.id) ? (
+                          <ChevronDown className="w-4 h-4 text-gray-400" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4 text-gray-400" />
                         )}
                       </div>
-                      <span className="text-gray-500">
-                        {expandedPoints.has(point.id) ? '▼' : '▶'}
-                      </span>
-                    </div>
 
-                    {/* Поля точки */}
-                    {expandedPoints.has(point.id) && (
-                      <div className="p-4 bg-gray-50">
-                        <div className="space-y-3">
-                          {/* Заголовки */}
-                          <div className="grid grid-cols-12 gap-3 px-2 text-xs font-medium text-gray-500">
-                            <div className="col-span-3">Поле</div>
-                            <div className="col-span-7">Описание</div>
-                            <div className="col-span-2">Конфиденц.</div>
-                          </div>
-
-                          {/* Поля */}
+                      {/* Поля точки */}
+                      {expandedPoints.has(point.id) && (
+                        <div className="p-4 space-y-4 bg-white">
                           {Object.entries(editingPoint.fields).map(([fieldName, fieldData]) => (
-                            <div key={fieldName} className="grid grid-cols-12 gap-3 items-center">
-                              <div className="col-span-3">
-                                <div className="text-sm font-medium text-gray-600 bg-white px-2 py-2 rounded border">
-                                  {fieldName}
-                                </div>
+                            <div key={fieldName} className="space-y-2">
+                              <div className="text-sm font-medium text-gray-700">
+                                {fieldName}
                               </div>
-                              <div className="col-span-7">
-                                <input
-                                  type="text"
-                                  value={fieldData.description}
-                                  onChange={(e) => updateField(point.id, fieldName, 'description', e.target.value)}
-                                  className="w-full px-2 py-1 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-300"
-                                  placeholder="Описание"
-                                />
-                              </div>
-                              <div className="col-span-2">
-                                <div className="flex items-center space-x-2">
+                              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+                                <div className="lg:col-span-9">
                                   <input
-                                    type="range"
-                                    min="1"
-                                    max="10"
-                                    value={fieldData.confidentiality}
-                                    onChange={(e) => updateField(point.id, fieldName, 'confidentiality', parseInt(e.target.value))}
-                                    className="w-16"
+                                    type="text"
+                                    value={fieldData.description}
+                                    onChange={(e) => updateField(point.id, fieldName, 'description', e.target.value)}
+                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-sm placeholder-gray-400"
+                                    placeholder="Описание"
                                   />
-                                  <span className="text-xs w-4">{fieldData.confidentiality}</span>
+                                </div>
+                                <div className="lg:col-span-3">
+                                  <div className="flex items-center space-x-2">
+                                    <input
+                                      type="range"
+                                      min="1"
+                                      max="10"
+                                      value={fieldData.confidentiality}
+                                      onChange={(e) => updateField(point.id, fieldName, 'confidentiality', parseInt(e.target.value))}
+                                      className="flex-1"
+                                    />
+                                    <span className="text-sm font-medium text-gray-700 w-8">
+                                      {fieldData.confidentiality}
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
                             </div>
                           ))}
 
                           {/* Кнопки действий */}
-                          <div className="flex justify-end space-x-2 mt-4 pt-3 border-t">
-                            {editingPoint.hasChanges && (
-                              <>
-                                <button
-                                  onClick={() => cancelChanges(point.id)}
-                                  className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100"
-                                >
-                                  Отмена
-                                </button>
-                                <button
-                                  onClick={() => savePoint(point.id)}
-                                  disabled={savingPoint === point.id}
-                                  className="px-4 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:opacity-50 flex items-center space-x-1"
-                                >
-                                  {savingPoint === point.id ? (
-                                    <>
-                                      <span className="inline-block animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent"></span>
-                                      <span>Сохранение...</span>
-                                    </>
-                                  ) : (
-                                    <span>💾 Принять изменения</span>
-                                  )}
-                                </button>
-                              </>
-                            )}
-                          </div>
+                          {editingPoint.hasChanges && (
+                            <div className="flex justify-end space-x-2 pt-4 border-t border-gray-200">
+                              <button
+                                onClick={() => cancelChanges(point.id)}
+                                className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-1"
+                              >
+                                <X className="w-4 h-4" />
+                                <span>Отмена</span>
+                              </button>
+                              <button
+                                onClick={() => savePoint(point.id)}
+                                disabled={savingPoint === point.id}
+                                className="px-4 py-1.5 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg hover:from-blue-600 hover:to-purple-600 transition-all disabled:opacity-50 text-sm font-medium flex items-center space-x-2"
+                              >
+                                {savingPoint === point.id ? (
+                                  <>
+                                    <Loader className="w-4 h-4 animate-spin" />
+                                    <span>Сохранение...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Save className="w-4 h-4" />
+                                    <span>Сохранить</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      ))}
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        ))}
 
-      {/* Нет данных */}
-      {!loading && points.length === 0 && !error && (
-        <div className="bg-white rounded shadow p-8 text-center text-gray-500">
-          Нет доступных точек для редактирования
-        </div>
-      )}
-    </div>
+        {/* Нет данных */}
+        {!loading && points.length === 0 && (
+          <div className="text-center py-12">
+            <Database className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500">Нет доступных точек для редактирования</p>
+          </div>
+        )}
+      </div>
+    </>
   )
 }

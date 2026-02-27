@@ -1,10 +1,12 @@
+// page.tsx
 'use client'
 
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-
-
 import { useState, useEffect } from 'react'
+import {
+  Zap, ChevronDown, ChevronRight,
+  Database, Table, Eye, EyeOff, Sliders, Loader
+} from 'lucide-react'
+import Toast from './components/Toast'
 
 interface TableSchema {
   [tableName: string]: string[]
@@ -30,24 +32,24 @@ export default function Home() {
   const [manualInput, setManualInput] = useState(false)
   const [loading, setLoading] = useState(false)
   const [loadingSchema, setLoadingSchema] = useState(false)
-  const [result, setResult] = useState('')
-  const [error, setError] = useState('')
   const [backendUrl, setBackendUrl] = useState('http://localhost:5001')
-  const [showTooltip, setShowTooltip] = useState(false)
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
 
-  // Состояния для схемы БД
   const [schema, setSchema] = useState<TableSchema | null>(null)
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set())
   const [fieldDescriptions, setFieldDescriptions] = useState<FieldDescriptions>({})
   const [excludedTables, setExcludedTables] = useState<ExcludedTables>({})
   const [schemaError, setSchemaError] = useState('')
 
-  // Загрузка схемы БД при активации ручного режима
   useEffect(() => {
     if (manualInput && !schema) {
       loadSchema()
     }
   }, [manualInput])
+
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type })
+  }
 
   const loadSchema = async () => {
     setLoadingSchema(true)
@@ -62,15 +64,13 @@ export default function Home() {
       })
 
       if (!response.ok) {
-        throw new Error(`Ошибка загрузки схемы: ${response.status}`)
+        throw new Error(`Ошибка загрузки: ${response.status}`)
       }
 
       const data = await response.json()
       setSchema(data)
 
-      // Инициализируем описания полей пустыми значениями
       const initialDescriptions: FieldDescriptions = {}
-      // Инициализируем исключенные таблицы (по умолчанию все доступны)
       const initialExcluded: ExcludedTables = {}
 
       Object.entries(data).forEach(([tableName, fields]) => {
@@ -87,9 +87,11 @@ export default function Home() {
 
       setFieldDescriptions(initialDescriptions)
       setExcludedTables(initialExcluded)
+      showToast('Схема успешно загружена', 'success')
 
     } catch (err: any) {
       setSchemaError(err.message)
+      showToast(err.message, 'error')
       console.error('Ошибка загрузки схемы:', err)
     } finally {
       setLoadingSchema(false)
@@ -100,12 +102,12 @@ export default function Home() {
     try {
       const response = await fetch(`${backendUrl}/docs`)
       if (response.ok) {
-        alert('✅ Бэкенд доступен!')
+        showToast('Бэкенд доступен', 'success')
       } else {
-        alert(`❌ Ошибка: ${response.status}`)
+        showToast(`Ошибка: ${response.status}`, 'error')
       }
     } catch (err: any) {
-      alert(`❌ ${err.message}`)
+      showToast(err.message, 'error')
     }
   }
 
@@ -144,15 +146,12 @@ export default function Home() {
     }))
   }
 
-  // !!! ИСПРАВЛЕННАЯ ФУНКЦИЯ !!!
   const generateFieldsDescription = (): FieldDescriptions => {
-    // Возвращаем только заполненные описания для НЕисключенных таблиц
     const result: FieldDescriptions = {}
 
     Object.entries(fieldDescriptions).forEach(([tableName, fields]) => {
-      // Пропускаем исключенные таблицы - они полностью удаляются из запроса
       if (excludedTables[tableName]) {
-        return // полностью пропускаем таблицу
+        return
       }
 
       const filledFields: any = {}
@@ -162,7 +161,6 @@ export default function Home() {
         }
       })
 
-      // Добавляем таблицу только если есть заполненные поля
       if (Object.keys(filledFields).length > 0) {
         result[tableName] = filledFields
       }
@@ -171,7 +169,6 @@ export default function Home() {
     return result
   }
 
-  // Подсчет статистики
   const getStats = () => {
     if (!schema) return { total: 0, excluded: 0, active: 0 }
 
@@ -182,340 +179,296 @@ export default function Home() {
     return { total, excluded, active }
   }
 
-const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault()
-  setLoading(true)
-  setResult('')
-  setError('')
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
 
-  try {
-    // Базовый запрос с vector_database
-    const requestBody: any = {
-      vector_database: {
-        vector_database: collectionName
-      }
-    }
-
-    if (manualInput) {
-      // Генерируем описания полей
-      const fieldsDesc = generateFieldsDescription()
-
-      // Оборачиваем fields_description в еще один объект с ключом fields_description
-      if (Object.keys(fieldsDesc).length > 0) {
-        requestBody.fields_description = {
-          fields_description: fieldsDesc  // Двойная вложенность!
+    try {
+      const requestBody: any = {
+        vector_database: {
+          vector_database: collectionName
         }
       }
+
+      if (manualInput) {
+        const fieldsDesc = generateFieldsDescription()
+        if (Object.keys(fieldsDesc).length > 0) {
+          requestBody.fields_description = {
+            fields_description: fieldsDesc
+          }
+        }
+      }
+
+      const url = `${backendUrl}/vector/?flag=${manualInput}`
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        showToast('Вектор успешно создан', 'success')
+      } else {
+        showToast(JSON.stringify(data), 'error')
+      }
+    } catch (err: any) {
+      showToast(`Ошибка соединения: ${err.message}`, 'error')
+    } finally {
+      setLoading(false)
     }
-
-    const url = `${backendUrl}/vector/?flag=${manualInput}`
-
-    console.log('URL:', url)
-    console.log('Body:', JSON.stringify(requestBody, null, 2))
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
-    })
-
-    const data = await response.json()
-
-    if (response.ok) {
-      setResult(JSON.stringify(data, null, 2))
-    } else {
-      setError(JSON.stringify(data, null, 2))
-    }
-  } catch (err: any) {
-    setError(`Ошибка соединения: ${err.message}`)
-  } finally {
-    setLoading(false)
   }
-}
 
   const stats = getStats()
 
   return (
-    <main className="min-h-screen p-4 bg-gray-100">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-2xl font-bold mb-4">Vector Database</h1>
+    <>
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
 
-        <div className="bg-white rounded shadow p-4 mb-4">
-          <div className="flex gap-2 items-center">
+      <div className="space-y-6">
+        {/* Заголовок страницы */}
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">
+            Создание вектора
+          </h1>
+          <p className="text-sm text-gray-600 mt-1">
+            Преобразуйте структуру базы данных в векторное представление
+          </p>
+        </div>
+
+        {/* Настройки подключения */}
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="flex gap-2">
             <input
               type="text"
               value={backendUrl}
               onChange={(e) => setBackendUrl(e.target.value)}
-              className="flex-1 px-2 py-1 border rounded text-sm"
+              className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-sm placeholder-gray-400"
               placeholder="URL бэкенда"
             />
             <button
               onClick={testConnection}
-              className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600"
+              className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg hover:from-blue-600 hover:to-purple-600 transition-all text-sm font-medium flex items-center space-x-2"
             >
-              Проверить
+              <Zap className="w-4 h-4" />
+              <span>Проверить</span>
             </button>
           </div>
         </div>
 
-        <div className="bg-white rounded shadow p-6">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Название коллекции */}
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Название коллекции <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={collectionName}
-                onChange={(e) => setCollectionName(e.target.value)}
-                className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
-                placeholder="my_collection"
-                required
-              />
-            </div>
+        {/* Основная форма */}
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Название коллекции */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Название коллекции
+            </label>
+            <input
+              type="text"
+              value={collectionName}
+              onChange={(e) => setCollectionName(e.target.value)}
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 placeholder-gray-400"
+              placeholder="my_collection"
+              required
+            />
+            <p className="text-xs text-gray-500 mt-2">
+              Имя коллекции в векторной базе данных
+            </p>
+          </div>
 
-            {/* Чекбокс для выбора режима */}
-            <div className="flex items-center space-x-2 relative">
-              <input
-                type="checkbox"
-                id="manualInput"
-                checked={manualInput}
-                onChange={(e) => setManualInput(e.target.checked)}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              />
-              <label htmlFor="manualInput" className="text-sm font-medium text-gray-700">
-                Ручной ввод описаний полей
-              </label>
-              <div
-                className="relative"
-                onMouseEnter={() => setShowTooltip(true)}
-                onMouseLeave={() => setShowTooltip(false)}
-              >
-                <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-gray-300 text-white text-xs cursor-help">?</span>
-                {showTooltip && (
-                  <div className="absolute left-0 bottom-6 w-64 p-2 bg-gray-800 text-white text-xs rounded shadow-lg z-10">
-                    Если чекбокс активен - вы вручную заполняете описания полей. Если неактивен - описания генерируются нейросетью автоматически
-                  </div>
-                )}
+          {/* Режим ввода */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setManualInput(!manualInput)}
+                  className={`
+                    relative inline-flex h-6 w-11 items-center rounded-full transition-colors
+                    ${manualInput ? 'bg-blue-500' : 'bg-gray-300'}
+                  `}
+                >
+                  <span
+                    className={`
+                      inline-block h-4 w-4 transform rounded-full bg-white transition-transform
+                      ${manualInput ? 'translate-x-6' : 'translate-x-1'}
+                    `}
+                  />
+                </button>
+                <span className="text-sm font-medium text-gray-700">
+                  Ручной ввод описаний
+                </span>
               </div>
             </div>
 
-            {/* Ручной ввод описаний полей */}
-            {manualInput && (
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <h2 className="text-lg font-medium">Описания полей таблиц</h2>
-                  {!schema && !loadingSchema && !schemaError && (
-                    <button
-                      type="button"
-                      onClick={loadSchema}
-                      className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
-                    >
-                      Загрузить схему БД
-                    </button>
-                  )}
+            <div className="mt-3 text-xs text-gray-600 bg-gray-50 p-3 rounded-lg">
+              {manualInput
+                ? '✏️ Вы сами описываете поля таблиц. Заполните описания для нужных полей, исключенные таблицы не будут обработаны.'
+                : '🤖 Автоматическая генерация: описания полей будут созданы нейросетью на основе структуры базы данных'
+              }
+            </div>
+          </div>
+
+          {/* Ручной ввод описаний */}
+          {manualInput && (
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-medium text-gray-900">Схема базы данных</h2>
+              </div>
+
+              {/* Статистика */}
+              {schema && (
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-blue-50 rounded-lg p-3 text-center">
+                    <Database className="w-4 h-4 text-blue-500 mx-auto mb-1" />
+                    <span className="text-sm font-medium text-blue-700">{stats.total}</span>
+                    <span className="text-xs text-blue-600 block">всего</span>
+                  </div>
+                  <div className="bg-green-50 rounded-lg p-3 text-center">
+                    <Eye className="w-4 h-4 text-green-500 mx-auto mb-1" />
+                    <span className="text-sm font-medium text-green-700">{stats.active}</span>
+                    <span className="text-xs text-green-600 block">активны</span>
+                  </div>
+                  <div className="bg-red-50 rounded-lg p-3 text-center">
+                    <EyeOff className="w-4 h-4 text-red-500 mx-auto mb-1" />
+                    <span className="text-sm font-medium text-red-700">{stats.excluded}</span>
+                    <span className="text-xs text-red-600 block">исключены</span>
+                  </div>
                 </div>
+              )}
 
-                {/* Статистика по таблицам */}
-                {schema && (
-                  <div className="grid grid-cols-3 gap-2 text-sm">
-                    <div className="bg-blue-50 p-2 rounded text-center">
-                      <span className="font-medium text-blue-700">Всего: {stats.total}</span>
-                    </div>
-                    <div className="bg-green-50 p-2 rounded text-center">
-                      <span className="font-medium text-green-700">Активны: {stats.active}</span>
-                    </div>
-                    <div className="bg-red-50 p-2 rounded text-center">
-                      <span className="font-medium text-red-700">Исключены: {stats.excluded}</span>
-                    </div>
-                  </div>
-                )}
+              {/* Загрузка */}
+              {loadingSchema && (
+                <div className="text-center py-8">
+                  <Loader className="w-8 h-8 text-blue-500 animate-spin mx-auto mb-3" />
+                  <p className="text-sm text-gray-600">Загрузка схемы базы данных...</p>
+                </div>
+              )}
 
-                {/* Состояния загрузки */}
-                {loadingSchema && (
-                  <div className="text-center py-4">
-                    <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-gray-300 border-t-blue-600"></div>
-                    <p className="text-sm text-gray-500 mt-2">Загрузка схемы базы данных...</p>
-                  </div>
-                )}
-
-                {/* Ошибка загрузки */}
-                {schemaError && (
-                  <div className="bg-red-50 border border-red-200 rounded p-3">
-                    <p className="text-sm text-red-600">Ошибка загрузки схемы: {schemaError}</p>
-                    <button
-                      type="button"
-                      onClick={loadSchema}
-                      className="mt-2 text-sm text-blue-600 hover:text-blue-800"
+              {/* Схема */}
+              {schema && Object.keys(schema).length > 0 && (
+                <div className="space-y-3">
+                  {Object.entries(schema).map(([tableName, fields]) => (
+                    <div
+                      key={tableName}
+                      className={`border border-gray-200 rounded-lg overflow-hidden transition-opacity
+                        ${excludedTables[tableName] ? 'opacity-60' : ''}`}
                     >
-                      Попробовать снова
-                    </button>
-                  </div>
-                )}
-
-                {/* Схема БД */}
-                {schema && Object.keys(schema).length > 0 && (
-                  <div className="space-y-2">
-                    {Object.entries(schema).map(([tableName, fields]) => (
-                      <div key={tableName} className={`border rounded overflow-hidden ${excludedTables[tableName] ? 'opacity-60 bg-gray-50' : ''}`}>
-                        {/* Заголовок таблицы */}
-                        <div
-                          onClick={() => toggleTable(tableName)}
-                          className="bg-gray-50 px-4 py-2 flex items-center justify-between cursor-pointer hover:bg-gray-100"
-                        >
-                          <div className="flex items-center space-x-3">
-                            <span className="font-medium text-gray-700">{tableName}</span>
-                            <span className="text-xs text-gray-500">
-                              {fields.length} полей
-                            </span>
-                          </div>
-                          <div className="flex items-center space-x-4">
-                            {/* Чекбокс исключения таблицы */}
-                            <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
-                              <input
-                                type="checkbox"
-                                id={`exclude-${tableName}`}
-                                checked={excludedTables[tableName] || false}
-                                onChange={() => toggleTableExclusion(tableName)}
-                                className="h-3 w-3 text-red-600 focus:ring-red-500 border-gray-300 rounded"
-                              />
-                              <label
-                                htmlFor={`exclude-${tableName}`}
-                                className="text-xs text-gray-600 cursor-help"
-                                title="Если чекбокс активен, таблица не будет векторизирована и пользователь не сможет получить к ней доступ"
-                              >
-                                исключить
-                              </label>
-                            </div>
-                            <span className="text-gray-500">
-                              {expandedTables.has(tableName) ? '▼' : '▶'}
-                            </span>
-                          </div>
+                      {/* Заголовок таблицы */}
+                      <div
+                        onClick={() => toggleTable(tableName)}
+                        className="bg-gray-50 px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-gray-100 transition-colors"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <Table className="w-4 h-4 text-gray-400" />
+                          <span className="font-medium text-gray-900">{tableName}</span>
+                          <span className="text-xs text-gray-500">
+                            {fields.length} {fields.length === 1 ? 'поле' : 'полей'}
+                          </span>
                         </div>
+                        <div className="flex items-center space-x-4">
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              onClick={() => toggleTableExclusion(tableName)}
+                              className={`p-1 rounded transition-colors ${
+                                excludedTables[tableName]
+                                  ? 'text-red-500 hover:bg-red-50'
+                                  : 'text-gray-400 hover:bg-gray-200'
+                              }`}
+                              title={excludedTables[tableName] ? 'Включить таблицу' : 'Исключить таблицу'}
+                            >
+                              {excludedTables[tableName] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                          </div>
+                          {expandedTables.has(tableName) ? (
+                            <ChevronDown className="w-4 h-4 text-gray-400" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4 text-gray-400" />
+                          )}
+                        </div>
+                      </div>
 
-                        {/* Поля таблицы (показываем только если таблица не исключена) */}
-                        {expandedTables.has(tableName) && !excludedTables[tableName] && (
-                          <div className="p-4 space-y-3">
-                            {(fields as string[]).map(fieldName => (
-                              <div key={`${tableName}-${fieldName}`} className="grid grid-cols-12 gap-3 items-start">
-                                {/* Название поля (нередактируемое) */}
-                                <div className="col-span-2">
-                                  <div className="text-sm font-medium text-gray-600 bg-gray-50 px-2 py-2 rounded">
-                                    {fieldName}
-                                  </div>
-                                </div>
-
-                                {/* Описание поля */}
-                                <div className="col-span-7">
+                      {/* Поля таблицы */}
+                      {expandedTables.has(tableName) && !excludedTables[tableName] && (
+                        <div className="p-4 space-y-4 bg-white">
+                          {(fields as string[]).map(fieldName => (
+                            <div key={`${tableName}-${fieldName}`} className="space-y-2">
+                              <div className="text-sm font-medium text-gray-700">
+                                {fieldName}
+                              </div>
+                              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+                                <div className="lg:col-span-8">
                                   <input
                                     type="text"
                                     value={fieldDescriptions[tableName]?.[fieldName]?.description || ''}
                                     onChange={(e) => updateFieldDescription(tableName, fieldName, 'description', e.target.value)}
-                                    className="w-full px-2 py-1 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-300"
+                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-sm placeholder-gray-400"
                                     placeholder={`Описание для ${fieldName}`}
                                   />
                                 </div>
-
-                                {/* Конфиденциальность */}
-                                <div className="col-span-3">
-                                  <div className="flex items-center space-x-2">
+                                <div className="lg:col-span-4">
+                                  <div className="flex items-center space-x-3">
+                                    <Sliders className="w-4 h-4 text-gray-400" />
                                     <input
                                       type="range"
                                       min="1"
                                       max="10"
                                       value={fieldDescriptions[tableName]?.[fieldName]?.confidentiality || 5}
                                       onChange={(e) => updateFieldDescription(tableName, fieldName, 'confidentiality', parseInt(e.target.value))}
-                                      className="w-16"
+                                      className="flex-1"
                                     />
-                                    <span className="text-xs w-4">{fieldDescriptions[tableName]?.[fieldName]?.confidentiality || 5}</span>
-                                    <span className="text-xs text-gray-400">conf</span>
+                                    <span className="text-sm font-medium text-gray-700 w-8">
+                                      {fieldDescriptions[tableName]?.[fieldName]?.confidentiality || 5}
+                                    </span>
                                   </div>
                                 </div>
                               </div>
-                            ))}
-                          </div>
-                        )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
 
-                        {/* Сообщение для исключенной таблицы */}
-                        {expandedTables.has(tableName) && excludedTables[tableName] && (
-                          <div className="p-4 text-center text-sm text-gray-500 italic">
-                            Таблица исключена из векторизации и не будет включена в запрос
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Информация о заполнении */}
-                {schema && (
-                  <div className="mt-2 p-2 bg-blue-50 rounded text-xs text-blue-700">
-                    <p>💡 Заполните описания для нужных полей. Исключенные таблицы полностью удаляются из запроса.</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Информация о режиме генерации */}
-            {!manualInput && (
-              <div className="bg-blue-50 border border-blue-200 rounded p-3">
-                <p className="text-sm text-blue-700">
-                  🤖 Режим автоматической генерации: описания полей будут созданы нейросетью на основе структуры базы данных
-                </p>
-              </div>
-            )}
-
-            {/* Превью запроса */}
-            <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded">
-              <p className="font-medium mb-2">📦 Отправляемые данные:</p>
-              <pre className="text-xs overflow-auto max-h-40">
-            {JSON.stringify({
-              vector_database: {
-                vector_database: collectionName || 'collection_name'
-              },
-              ...(manualInput && schema ? generateFieldsDescription() : {})
-            }, null, 2)}
-              </pre>
-              {manualInput && schema && Object.values(excludedTables).some(v => v) && (
-                <p className="text-xs text-gray-500 mt-2">
-                  ℹ️ Исключенные таблицы: {Object.entries(excludedTables).filter(([_, excl]) => excl).map(([name]) => name).join(', ')}
-                </p>
+                      {/* Сообщение для исключенной таблицы */}
+                      {expandedTables.has(tableName) && excludedTables[tableName] && (
+                        <div className="p-4 text-center text-sm text-gray-500 italic bg-white">
+                          Таблица исключена из обработки
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
-
-            <button
-              type="submit"
-              disabled={loading || loadingSchema}
-              className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:opacity-50"
-            >
-              {loading ? 'Отправка...' : 'Добавить вектор'}
-            </button>
-          </form>
-
-          {/* Ошибка */}
-          {error && (
-            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded">
-              <p className="text-red-700 text-sm font-medium mb-1">Ошибка:</p>
-              <pre className="text-red-600 text-xs whitespace-pre-wrap overflow-auto max-h-40">
-                {error}
-              </pre>
-            </div>
           )}
 
-          {/* Результат */}
-          {result && (
-            <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded">
-              <p className="text-green-700 text-sm font-medium mb-1">Ответ:</p>
-              <pre className="text-green-600 text-xs whitespace-pre-wrap overflow-auto max-h-40">
-                {result}
-              </pre>
-            </div>
-          )}
-        </div>
+          {/* Кнопка отправки */}
+          <button
+            type="submit"
+            disabled={loading || loadingSchema}
+            className="w-full py-4 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-xl font-medium hover:from-blue-600 hover:to-purple-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-500/25"
+          >
+            {loading ? (
+              <div className="flex items-center justify-center space-x-2">
+                <Loader className="w-5 h-5 animate-spin" />
+                <span>Обработка...</span>
+              </div>
+            ) : (
+              'Создать вектор'
+            )}
+          </button>
+        </form>
       </div>
-    </main>
+    </>
   )
 }
