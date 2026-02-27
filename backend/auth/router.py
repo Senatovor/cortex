@@ -10,7 +10,7 @@ from .schemes import RegistrateUserScheme, SystemUserScheme
 from .schemes import TokenScheme
 
 auth_api_router = APIRouter(
-    prefix='/auth_api',
+    prefix='/auth',
     tags=['auth'],
 )
 

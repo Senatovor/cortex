@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
 
     app.state.db_manager = session_manager
     app.state.vector_manager = vector_manager
-
+    
     yield
 
     # Очистка
@@ -74,6 +74,7 @@ def create_app() -> FastAPI:
 
 if __name__ == '__main__':
     try:
+        logger.info('Запуск приложения...')
         logger.add(
             Path(__file__).parent.parent / "app.log",
             rotation=config.logger_config.ROTATION,
@@ -92,6 +93,7 @@ if __name__ == '__main__':
             log_config=None,
             log_level=None,
         )
+        logger.info('Приложение запущено')
 
     except Exception as e:
         logger.error(f'Во время создания приложения произошла ошибка: {e}')
