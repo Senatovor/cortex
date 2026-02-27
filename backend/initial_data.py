@@ -6,7 +6,6 @@ from loguru import logger
 
 from backend.auth.handler import AuthHandler
 from backend.auth.models import User
-from backend.auth.scopes_dict import super_admin_scopes
 from backend.config import config
 from backend.database.executer import sql_manager
 from backend.database.session import session_manager
@@ -14,7 +13,7 @@ from backend.auth.schemes import RegistrateUserScheme
 
 
 class AdminCreateScheme(RegistrateUserScheme):
-    scopes: list[str] = super_admin_scopes
+    is_superuser: bool = True
 
 
 async def check_and_create_migrations():
@@ -46,7 +45,7 @@ async def create_admin(db_session: AsyncSession):
         select(User).where(
             User.username == config.ADMIN_NAME,
             User.email == config.ADMIN_EMAIL,
-            User.scopes == super_admin_scopes,
+            User.is_superuser == True
         )
     ).scalar_one_or_none(db_session)
 
