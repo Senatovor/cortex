@@ -3,6 +3,7 @@ from qdrant_client.models import Distance, VectorParams
 from langchain_qdrant import QdrantVectorStore
 from qdrant_client import QdrantClient
 from loguru import logger
+import asyncio
 
 from backend.config import config
 
@@ -100,3 +101,4 @@ class VectorStoreManager:
 
 
 vector_manager = VectorStoreManager()
+asyncio.run(vector_manager.init())

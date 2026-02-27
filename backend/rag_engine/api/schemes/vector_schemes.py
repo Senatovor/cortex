@@ -1,6 +1,4 @@
 import uuid
-from dataclasses import field
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -22,7 +20,7 @@ class FieldsDescScheme(BaseModel):
 
 class PointResponseSchema(BaseModel):
     id: uuid.UUID = Field(...)
-    table_name: str = Field(..., )
+    table_name: str = Field(...)
     value: dict = Field(...)
 
     @classmethod

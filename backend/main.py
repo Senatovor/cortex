@@ -9,8 +9,8 @@ from pydantic import BaseModel
 from backend.database.session import session_manager, DatabaseSessionManager
 from backend.config import config
 from backend.auth.router import auth_api_router
-from backend.rag_engine.vector_router import vector_router
-from backend.rag_engine.qdrant import VectorStoreManager, vector_manager
+from backend.rag_engine.api.routers.vector_router import vector_router
+from backend.rag_engine.qdrant.manager import VectorStoreManager, vector_manager
 
 
 class AppState(BaseModel):
