@@ -2,34 +2,13 @@ from fastapi import APIRouter, Query, Depends, HTTPException, Request
 from typing import Optional
 from loguru import logger
 
-from ..database.session import DatabaseSessionManager
-from ..rag_engine.qdrant import VectorStoreManager
-from ..rag_engine.script import ScriptVector
-from ..rag_engine.vector_schemes import VectorDbScheme, FieldsDescScheme, PointUpdateScheme
+from ....database.session import DatabaseSessionManager
+from ...qdrant.manager import VectorStoreManager
+from ...qdrant.script import ScriptVector
+from ..schemes.vector_schemes import VectorDbScheme, FieldsDescScheme, PointUpdateScheme
+from ..depends.vector_dep import get_vector_manager, get_db_manager, get_fields_description
 
 vector_router = APIRouter(prefix="/vector", tags=["vector"])
-
-
-def get_fields_description(
-        flag: bool = Query(...),
-        fields_description: Optional[FieldsDescScheme] = None
-) -> Optional[FieldsDescScheme]:
-    """Функция, которая проверяет flag и возвращает fields_description при необходимости"""
-    if flag and fields_description is None:
-        raise HTTPException(
-            status_code=400,
-            detail="fields_description is required when flag is True"
-        )
-    return fields_description.fields_description if flag else None
-
-
-def get_vector_manager(request: Request) -> VectorStoreManager:
-    '''Возвращает vector_manager'''
-    return request.app.state.vector_manager
-
-
-async def get_db_manager(request: Request) -> DatabaseSessionManager:
-    return request.app.state.db_manager
 
 
 @vector_router.get('/points', summary='Получение точек из всех коллекций')

@@ -1,6 +1,6 @@
 from loguru import logger
 
-from backend.rag_engine_v3.graph.state import GraphState
+from .state import GraphState
 
 
 class Conditions:

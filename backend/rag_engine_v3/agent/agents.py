@@ -1,11 +1,10 @@
 from langchain_ollama import ChatOllama
-from langgraph.checkpoint.memory import InMemorySaver
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 
-from backend.config import config
-from backend.rag_engine_v3.rag_schemes import AnalyticScheme, QueryIntentScheme, SQLScheme
-from backend.rag_engine_v3.prompts import intent_classifier_prompt, sql_generate_prompt, analytic_prompt
+from .schemes import AnalyticScheme, QueryIntentScheme, SQLScheme
+from .prompts import intent_classifier_prompt, sql_generate_prompt, analytic_prompt
+from ...config import config
 
 
 def create_intent_classifier_agent():

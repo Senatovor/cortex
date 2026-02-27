@@ -1,23 +1,17 @@
-from langchain_core.runnables import RunnableConfig
 from langgraph.constants import START, END
+from sqlalchemy.ext.asyncio import AsyncSession
 from langgraph.graph import StateGraph
-from langgraph.checkpoint.memory import InMemorySaver
-import asyncio
 from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from backend.rag_engine.qdrant import vector_manager
-from backend.rag_engine_v3.graph.state import GraphState
-from backend.rag_engine_v3.graph.nodes import Nodes
-from backend.rag_engine_v3.graph.conditions import Conditions
-from backend.database.session import session_manager
-
-asyncio.run(session_manager.init())
+from .state import GraphState
+from .nodes import Nodes
+from .conditions import Conditions
 
 
 class AIGraphDatabase(Nodes, Conditions):
     def __init__(self, checkpointer: Any):
+        super().__init__()
+        
         self.graph = StateGraph(GraphState)
 
         self.graph.add_node('user_input', self.user_input_node)
@@ -71,10 +65,10 @@ class AIGraphDatabase(Nodes, Conditions):
             }
         )
         self.graph.add_conditional_edges(
-            'sql_analytic',
+            'generate_sql_for_analytic',
             self.check_size_df,
             {
-                'need_optimize': 'sql_analytic',
+                'need_optimize': 'generate_sql_for_analytic',
                 'not_need_optimize': 'analytic'
             }
         )
@@ -86,7 +80,7 @@ class AIGraphDatabase(Nodes, Conditions):
         result = await self.ai_graph_database.ainvoke(
             GraphState(
                 current_user_input=input
-            ).model_dump(),
+            ).model_dump(), # type: ignore
             config={
                 'configurable': {
                     'vector_manager': vector_manager,
@@ -96,3 +90,54 @@ class AIGraphDatabase(Nodes, Conditions):
             }
         )
         return result['messages'][-1].content
+
+from langgraph.checkpoint.memory import InMemorySaver
+
+checkpointer = InMemorySaver()
+ai_graph = AIGraphDatabase(checkpointer=checkpointer)
+
+# @session_manager.connection()
+# async def chat_with_ai(db_session):
+    
+#     checkpointer = InMemorySaver()
+#     ai_graph = AIGraphDatabase(checkpointer=checkpointer)
+    
+#     print("🤖 Чат с AI Graph Database запущен!")
+#     print("Введите 'exit' для выхода\n")
+    
+#     id_session = "user_123"  # Можно генерировать уникальный ID для каждого пользователя
+    
+#     while True:
+#         # Получаем ввод пользователя
+#         user_input = input("👤 Вы: ").strip()
+        
+#         # Проверка на выход
+#         if user_input.lower() in ['exit', 'quit', 'выход']:
+#             print("🤖 До свидания!")
+#             break
+        
+#         if not user_input:
+#             continue
+        
+#         try:
+#             # Вызываем метод call
+#             response = await ai_graph.call(
+#                 input=user_input,
+#                 id_session=id_session,
+#                 db_session=db_session,  # Подставьте вашу сессию
+#                 vector_manager=vector_manager  # Подставьте ваш векторный менеджер
+#             )
+            
+#             # Выводим ответ
+#             print(f"🤖 AI: {response}")
+            
+#         except Exception as e:
+#             print(f"❌ Ошибка: {e}")
+#             print("Попробуйте еще раз...")
+
+# # Функция для запуска асинхронного чата
+# def run_chat():
+#     asyncio.run(chat_with_ai())
+
+# if __name__ == "__main__":
+#     run_chat()

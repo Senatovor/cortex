@@ -5,17 +5,27 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, Base
 import polars as pl
 from pathlib import Path
 from polars import DataFrame
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.rag_engine_v3.agents import agent_intent_classifier, agent_analytic, agent_sql_generate
-from backend.rag_engine_v3.graph.state import GraphState
+from .state import GraphState
+from ..agent.agents import (
+    create_analytic_agent,
+    create_intent_classifier_agent,
+    create_sql_generate_agent
+)
 
 
 class Nodes:
+    def __init__(self):
+        self.agent_intent_classifier = create_intent_classifier_agent()
+        self.agent_sql_generate = create_sql_generate_agent()
+        self.agent_analytic = create_analytic_agent()
+    
     @staticmethod
     async def _get_schema_db_info_for_vector(input: str, config: RunnableConfig) -> str | None:
         try:
-            vector_manager = config['configurable'].get('vector_manager')
-            structure_store = vector_manager.get_vector_store('structure')
+            vector_manager = config['configurable'].get('vector_manager') # type: ignore
+            structure_store = vector_manager.get_vector_store('structure') # type: ignore
             sql_info_scheme = await structure_store.asimilarity_search(input)
             logger.info(f"Найдено {len(sql_info_scheme)} релевантных таблиц")
             if not sql_info_scheme:
@@ -32,19 +42,26 @@ class Nodes:
 
     @staticmethod
     async def _execute_query_to_df(query: str, config: RunnableConfig) -> DataFrame:
-        db_session = config['configurable'].get('db_session')
+        db_session: AsyncSession = config['configurable'].get('db_session') # type: ignore
+        logger.info(f"Выполняю sql запрос...{db_session}")
         df = pl.read_database(query=query, connection=db_session)
         return df
 
     async def _write_excel_and_csv_from_sql_data(self, query: str, config: RunnableConfig):
         df = await self._execute_query_to_df(query, config)
-        filepath = Path(__file__).parent.parent.parent / 'files' / 'xlsx' / f'query_result_{uuid.uuid4()}.xlsx'
+        excel_dir = Path(__file__).parent.parent.parent.parent / 'files' / 'xlsx'
+        csv_dir = Path(__file__).parent.parent.parent.parent / 'files' / 'csv'
+        excel_dir.mkdir(parents=True, exist_ok=True)
+        csv_dir.mkdir(parents=True, exist_ok=True)
+        excel_filepath = excel_dir / f'query_result_{uuid.uuid4()}.xlsx'
+        csv_filepath = csv_dir / f'query_result_{uuid.uuid4()}.csv'
+        
         df.write_excel(
-            filepath.as_posix(),
+            excel_filepath.as_posix(),
             worksheet='List1',
             autofit=True,
         )
-        df.write_csv(filepath.as_posix())
+        df.write_csv(csv_filepath.as_posix())
 
     async def _write_json_from_sql_data(self, query: str, config: RunnableConfig):
         df = await self._execute_query_to_df(query, config)
@@ -62,12 +79,12 @@ class Nodes:
             output_messages: list[BaseMessage] | None = None,
     ) -> dict:
         try:
-            result = await agent_sql_generate.ainvoke({'messages': input_messages})
+            result = await self.agent_sql_generate.ainvoke({'messages': input_messages}) # type: ignore
             sql_query = result['structured_response'].sql_query
             logger.info(f'Сгенерированный SQL: {sql_query}')
             response = {
                 'sql_query': sql_query,
-                'error': None,
+                'error_str': None,
                 'error_attempt': 0
             }
             if output_messages:
@@ -85,11 +102,11 @@ class Nodes:
             if error_attempt >= 3:
                 return {
                     'messages': [AIMessage(content='Извините, произошла ошибка при формировании запроса.')],
-                    'error': None,
+                    'error_str': None,
                     'error_attempt': 0,
                 }
             return {
-                'error': str(e),
+                'error_str': str(e),
                 'error_attempt': error_attempt + 1
             }
 
@@ -102,11 +119,10 @@ class Nodes:
             'messages_length': messages_length
         }
 
-    @staticmethod
-    async def classify_intent_node(state: GraphState) -> dict:
+    async def classify_intent_node(self, state: GraphState) -> dict:
         current_user_input = state.current_user_input
         try:
-            result = await agent_intent_classifier.ainvoke({'messages': [HumanMessage(content=current_user_input)]})
+            result = await self.agent_intent_classifier.ainvoke({'messages': [HumanMessage(content=current_user_input)]})
             intent = result['structured_response']
             logger.info(f'Определено намерение: {intent.intent_type}')
             return {
@@ -138,7 +154,7 @@ class Nodes:
             ]
 
         answer = await self._generate_sql_and_execute(
-            input_messages=messages,
+            input_messages=messages, # type: ignore
             output_messages=[AIMessage(content='Ваш запрос на получение данных был выполнен и записан в excel файл')],
             error_attempt=error_attempt,
             config=config,
@@ -167,7 +183,7 @@ class Nodes:
             ]
 
         answer = await self._generate_sql_and_execute(
-            input_messages=messages,
+            input_messages=messages, # type: ignore
             output_messages=[
                 AIMessage(content='Ваш запрос на получение статистики был выполнен и записан в excel файл')],
             error_attempt=error_attempt,
@@ -203,19 +219,18 @@ class Nodes:
                             f'Исправь ошибку с учетом структуры БД: {error_str}')
             ]
         answer = await self._generate_sql_and_execute(
-            input_messages=messages,
+            input_messages=messages, # type: ignore
             error_attempt=error_attempt,
             need_return_df=True,
             config=config
         )
         return answer
 
-    @staticmethod
-    async def analytic_node(state: GraphState):
+    async def analytic_node(self, state: GraphState):
         sql_query = state.sql_query
         df = state.df
         try:
-            result = await agent_analytic.ainvoke(
+            result = await self.agent_analytic.ainvoke(
                 {'messages': [SystemMessage(content=f'Напиши аналитику по запросу пользователя '
                                                     f'на sql запросу {sql_query} на эти данные {df}')]}
             )

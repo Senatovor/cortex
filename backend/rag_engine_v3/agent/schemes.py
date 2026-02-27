@@ -1,12 +1,8 @@
-from typing import Annotated, Literal, Optional, Any
-from langchain_core.messages import BaseMessage
-from langgraph.graph import add_messages
-from pydantic import BaseModel, ConfigDict, Field
-from pandas import DataFrame
+from typing import Literal
+from pydantic import BaseModel, Field
 
 
 class QueryIntentScheme(BaseModel):
-    """Определяет намерение пользователя в запросе"""
     intent_type: Literal["data", "statistics", "analytics", "other"] = Field(
         description="Тип намерения: данные, статистика, аналитика или иной вопрос",
         default="other"

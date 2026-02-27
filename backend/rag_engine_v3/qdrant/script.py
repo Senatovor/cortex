@@ -5,12 +5,11 @@ import requests
 import json
 from loguru import logger
 
-from backend.database.session import session_manager
-from backend.rag_engine.models import QdrantIds
-from backend.rag_engine.qdrant import VectorStoreManager
-from backend.rag_engine.config import RagConfig
-from backend.database.executer import sql_manager
-from ..config import config
+from ...database.session import session_manager
+from ...database.executer import sql_manager
+from ..models import QdrantIds
+from .manager import VectorStoreManager
+from ...config import config
 
 
 class ScriptVector:
